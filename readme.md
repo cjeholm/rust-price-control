@@ -124,4 +124,4 @@ Issue reports are welcome. Pull requests are not handled at this moment.
 
 ## License
 
-This software is not yet licensed.
+ GPL-3.0 license
