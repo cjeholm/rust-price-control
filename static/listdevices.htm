@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Telldus Devices</title>
+    <style>
+      body {
+        background-color: #1e1e1e;
+        color: #aaa;
+        font-family: system-ui, sans-serif;
+        font-size: 1.1em;
+      }
+    </style>
+  </head>
+  <body>
+    <section id="text">
+      <h2>Telldus Devices</h2>
+      <ul>
+        <li>
+          These are the devices found on your Telldus system, formatted for your
+          config. Values for <i>mode</i>, <i>ratio</i> and <i>price</i> are
+          defaults.
+        </li>
+        <li>Copy & paste chosen devices, including the <i>[[device]]</i> header to your config file and change their settings.</li>
+        <li>Set <i>telldus = true</i> to enable price control for a device.</li>
+        <li>
+          The <i>name</i> value can be set to anything you want, the Telldus API only
+          cares about the <i>telldus_id</i>.
+        </li>
+      </ul>
+    </section>
+    <section id="devices">
+      <div id="device-list"></div>
+    </section>
+    <style>
+      #text {
+        padding: 20px;
+      }
+      #devices {
+        background-color: #333;
+        padding: 20px;
+      }
+    </style>
+    <script>
+      fetch("/listdevices")
+        .then((res) => res.json())
+        .then((data) => {
+          const container = document.getElementById("device-list");
+
+          data.device
+            .filter((d) => d.type === "device")
+            .forEach((d) => {
+              container.innerHTML += `
+[[device]]<br>
+name = "${d.name}"<br>
+mode = "Ratio"<br>
+ratio = 0.5<br>
+price = 1.5<br>
+force_update = false<br>
+telldus = false<br>
+telldus_id = "${d.id}"<br>
+<br>
+`;
+            });
+        })
+        .catch(console.error);
+    </script>
+  </body>
+</html>
