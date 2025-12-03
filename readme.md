@@ -5,6 +5,8 @@ on/off automatically or trigger custom scripts according to user-defined rules.
 
 > This project is currently in beta testing phase
 
+![Price graph and three devices in the webui](screenshot.png)
+
 ## Overview
 
 rpc retrieves daily electricity spot prices and evaluates them against each
