@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-// use std::io;
+use std::io;
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -23,15 +23,15 @@ pub enum ActionError {
     Io(#[from] std::io::Error),
 }
 
-// #[derive(Debug, Error)]
-// pub enum ConfigError {
-//     #[error("I/O error while reading config: {0}")]
-//     Io(#[from] io::Error),
-//
-//     #[error("Failed to parse config: {0}")]
-//     Parse(#[from] toml::de::Error),
-// }
-//
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("I/O error while reading config: {0}")]
+    Io(#[from] io::Error),
+
+    #[error("Failed to parse config: {0}")]
+    Parse(#[from] toml::de::Error),
+}
+
 // #[derive(Debug, Error)]
 // pub enum DeviceError {
 //     #[error("I/O error while reading devices: {0}")]
@@ -49,6 +49,9 @@ pub struct Config {
     pub currency: String,
     pub interval: u64,
     pub webui_port: u64,
+
+    #[serde(default)]
+    pub webui_toggle: bool,
 
     pub grid_fee: f64,
     pub energy_tax: f64,

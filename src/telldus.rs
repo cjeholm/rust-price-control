@@ -25,18 +25,17 @@ pub fn telldus_switch(
     device: &structs::Device,
     action: &structs::State,
 ) -> Result<String, ActionError> {
-    let command_request;
-    match action {
+    let command_request = match action {
         structs::State::On => {
-            command_request = format!("http://{}/api/device/turnOn", config.telldus_ip);
+            format!("http://{}/api/device/turnOn", config.telldus_ip)
         }
         structs::State::Off => {
-            command_request = format!("http://{}/api/device/turnOff", config.telldus_ip);
+            format!("http://{}/api/device/turnOff", config.telldus_ip)
         }
         _ => {
             return Err(ActionError::WrongState(action.clone()));
         }
-    }
+    };
 
     let client = Client::builder().timeout(Duration::from_secs(5)).build()?;
 

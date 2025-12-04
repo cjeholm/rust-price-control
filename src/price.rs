@@ -7,7 +7,6 @@ use serde_json::Value;
 use std::fs::File;
 use std::io::Write;
 use std::time::Duration as TimeDuration;
-use std::usize;
 use std::env;
 
 use crate::structs;
@@ -141,7 +140,7 @@ pub fn ratio_price(json: &Value, currency: &str, ratio: f64) -> Option<f64> {
         .collect();
 
     prices.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    prices.get(index as usize).copied()
+    prices.get(index).copied()
 }
 
 fn extract_valid_price(obj: &Value, currency: &str) -> Option<f64> {

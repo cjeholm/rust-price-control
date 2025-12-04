@@ -1,33 +1,60 @@
 use anyhow::Result;
 use chrono::{Datelike, Duration, Local};
-use log::{debug, warn};
+use log::{debug, info, warn};
+use std::thread;
+use std::time::Duration as TimeDuration;
 
-use crate::{
-    actions, price,
-    structs::{self, ActionError},
-};
+use crate::{actions, price, structs, telldus};
 
-/// Check cli args
-pub fn check_args(args: &Vec<String>) {
-    if args.contains(&"-h".to_string()) || args.contains(&"--help".to_string()) {
+/// Spawn a thread that loops just to get tomorrow's data at a lower tick rate.
+pub fn get_tomorrow_thread(config: structs::Config) {
+    thread::spawn(move || loop {
+        let tomorrow = make_tomorrow(&config);
+        if let Err(err) = price::read_price_data(tomorrow) {
+            debug!("Failed to download tomorrow’s data: {}", err);
+        }
+        thread::sleep(TimeDuration::from_secs(3600));
+    });
+}
+
+/// Check args for cli
+pub fn check_args(args: &[String], config_result: &Result<structs::Config, structs::ConfigError>) {
+    if args.contains(&"-h".into()) || args.contains(&"--help".into()) {
         println!("{}", env!("CARGO_PKG_DESCRIPTION"));
         println!("Usage: {} [OPTION]\n", env!("CARGO_PKG_NAME"));
         println!("    --telldus-list    List Telldus devices (requires config file)");
         println!("-h  --help            This help");
         println!("-v  --version         Version information");
         std::process::exit(0);
-    } else if args.contains(&"-v".to_string()) || args.contains(&"--version".to_string()) {
+    }
+
+    if args.contains(&"-v".into()) || args.contains(&"--version".into()) {
         println!("{} {}\n", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         println!("Copyright (C) {}", env!("CARGO_PKG_AUTHORS"));
         std::process::exit(0);
-    } else if args.contains(&"--telldus-list".to_string()) {
-        // do the listing in main function where config exists.
-        // we may be able to list help and stuff wothout it.
-        return;
-    } else {
-        println!("Unknown argument: {:?}", args);
+    }
+
+    if args.contains(&"--telldus-list".into()) {
+        let config = match config_result {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                eprintln!("The argument --telldus-list needs a working config file. Error loading config: {e}");
+                std::process::exit(2);
+            }
+        };
+
+        match telldus::telldus_list(config) {
+            Ok(output) => println!("{}", output),
+            Err(e) => {
+                eprintln!("Error listing Telldus devices: {e}");
+                std::process::exit(3);
+            }
+        }
         std::process::exit(0);
     }
+
+    println!("Unknown argument(s): {:?}", args);
+    std::process::exit(1);
 }
 
 /// Make a today-instance
@@ -76,7 +103,7 @@ pub fn logic_loop(
     tomorrow_spot_prices: &serde_json::Value,
     mut devices: structs::Devices,
     config: &structs::Config,
-) -> Result<structs::Devices, ActionError> {
+) -> Result<structs::Devices, structs::ActionError> {
     let price = price::current_price(today_spot_prices, &config.currency);
 
     let avg_price = price::average_price(today_spot_prices, &config.currency).unwrap();
@@ -102,14 +129,20 @@ pub fn logic_loop(
                 && device.today_trigger_price > price.unwrap_or_default())
                 || (device.force_update && device.today_trigger_price > price.unwrap_or_default())
             {
-                debug!("{} (Price mode) switching ON", device.name);
-                device.state = actions::change_state(&config, &device, structs::State::On)?;
+                info!(
+                    "{}: {:?} mode - Changing state to On",
+                    device.name, device.mode
+                );
+                device.state = actions::change_state(config, device, structs::State::On)?;
             } else if (device.state != structs::State::Off
                 && device.today_trigger_price < price.unwrap_or_default())
                 || (device.force_update && device.today_trigger_price < price.unwrap_or_default())
             {
-                debug!("{} (Price mode) switching OFF", device.name);
-                device.state = actions::change_state(&config, &device, structs::State::Off)?;
+                info!(
+                    "{}: {:?} mode - Changing state to Off",
+                    device.name, device.mode,
+                );
+                device.state = actions::change_state(config, device, structs::State::Off)?;
             }
         }
 
@@ -123,14 +156,20 @@ pub fn logic_loop(
                 && device.today_trigger_price > price.unwrap_or_default())
                 || (device.force_update && device.today_trigger_price > price.unwrap_or_default())
             {
-                debug!("{} (Ratio mode) switching ON", device.name);
-                device.state = actions::change_state(&config, &device, structs::State::On)?;
+                info!(
+                    "{}: {:?} mode - Changing state to On",
+                    device.name, device.mode
+                );
+                device.state = actions::change_state(config, device, structs::State::On)?;
             } else if (device.state != structs::State::Off
                 && device.today_trigger_price < price.unwrap_or_default())
                 || (device.force_update && device.today_trigger_price < price.unwrap_or_default())
             {
-                debug!("{} (Ratio mode) switching OFF", device.name);
-                device.state = actions::change_state(&config, &device, structs::State::Off)?;
+                info!(
+                    "{}: {:?} mode - Changing state to Off",
+                    device.name, device.mode
+                );
+                device.state = actions::change_state(config, device, structs::State::Off)?;
             }
         }
 

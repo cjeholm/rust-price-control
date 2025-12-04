@@ -4,7 +4,6 @@ use std::process::Command;
 use std::thread;
 
 use crate::structs;
-use crate::structs::ActionError;
 use crate::telldus;
 
 /// Change the state of a device and run its actions
@@ -12,14 +11,13 @@ pub fn change_state(
     config: &structs::Config,
     device: &structs::Device,
     action: structs::State,
-) -> Result<structs::State, ActionError> {
-    info!("{}: {:?} mode - Changing state to {:?}", device.name, device.mode, action);
+) -> Result<structs::State, structs::ActionError> {
     if device.telldus {
         info!(
             "{}: Telldus switching {:?} device {}",
             device.name, action, device.telldus_id
         );
-        let telldus_reply = match telldus::telldus_switch(&config, &device, &action) {
+        let telldus_reply = match telldus::telldus_switch(config, device, &action) {
             Ok(reply) => reply,
             Err(e) => {
                 error!("Telldus: {:?}", e);
@@ -28,8 +26,8 @@ pub fn change_state(
         };
         debug!("Telldus reply: {telldus_reply:?}");
     };
-    if (action == structs::State::On && device.script_on != "")
-        || (action == structs::State::Off && device.script_off != "")
+    if (action == structs::State::On && !device.script_on.is_empty())
+        || (action == structs::State::Off && !device.script_off.is_empty())
     {
         let _ = action_run_script(device, &action);
     };
@@ -37,7 +35,7 @@ pub fn change_state(
 }
 
 /// Run a custom On or Off script
-fn action_run_script(device: &structs::Device, action: &structs::State) -> Result<(), ActionError> {
+fn action_run_script(device: &structs::Device, action: &structs::State) -> Result<(), structs::ActionError> {
     let script: String = match action {
         structs::State::On => {
             info!("{}: Executing On script: {}", device.name, device.script_on);
@@ -52,7 +50,7 @@ fn action_run_script(device: &structs::Device, action: &structs::State) -> Resul
         }
         _ => {
             warn!("Weird state switch");
-            return Err(ActionError::WrongState(action.clone()));
+            return Err(structs::ActionError::WrongState(action.clone()));
         }
     };
 

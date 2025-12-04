@@ -27,6 +27,10 @@ vat = 0.25 # moms: 25% = 0.25
 interval = 10
 webui_port = 8088
 
+# Enable endpoints and webui buttons for manually switching on and off devices.
+# Everyone with access to your webui will be able to toggle your devices.
+webui_toggle = false
+
 # TELLDUS
 telldus_ip = "192.168.0.101"
 telldus_token ="Bearer xxxxx"

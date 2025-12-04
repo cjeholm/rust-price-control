@@ -104,7 +104,8 @@ async function priceChart() {
     options: {
       maintainAspectRatio: false,
       responsive: true,
-      animation: { duration: 200 },
+      // animation: { duration: 200 },
+      animation: false,
       plugins: {
         legend: {
           labels: {
@@ -161,11 +162,14 @@ async function priceChart() {
             Total price: <strong>${totalPrice.toFixed(3)}</strong> <br>
           `;
   container.appendChild(total);
+  deviceList();
 }
 
 async function deviceList() {
   const res = await fetch("/devices");
   const json = await res.json();
+  const res2 = await fetch("/config");
+  const config = await res2.json();
 
   const container = document.getElementById("devices");
   container.innerHTML = "";
@@ -183,39 +187,66 @@ async function deviceList() {
     else if (d.state === "Off") stateClass = "state-off";
     else stateClass = "state-unknown";
 
-    if (d.mode === "Price")
-      card.innerHTML = `
-             <span class="state ${stateClass}"><strong>${d.name}</strong></span><br>
-             <!-- <span class="state ${stateClass}">${d.state}</span> <strong>${d.name}</strong><br> -->
-            Mode: ${d.mode}<br>
-            Telldus: ${d.telldus}<br>
-            Price: ${d.price}<br>
-            <s>Ratio: ${d.ratio}</s><br>
-            <!-- Trigger price: ${Number(d.today_trigger_price).toFixed(3)}<br> -->
-            <!-- Tomrw trigger: ${Number(d.tomorrow_trigger_price).toFixed(3)}<br> -->
-          `;
-    else if (d.mode === "Ratio")
-      card.innerHTML = `
-             <!-- <span class="state ${stateClass}">${d.state}</span> <strong>${d.name}</strong><br> -->
-             <span class="state ${stateClass}"><strong>${d.name}</strong></span><br>
-            Mode: ${d.mode}<br>
-            Telldus: ${d.telldus}<br>
-            <s>Price: ${d.price}</s><br>
-            Ratio: ${d.ratio}<br>
-            <!-- Trigger price: ${Number(d.today_trigger_price).toFixed(3)}<br> -->
-            <!-- Tomrw trigger: ${Number(d.tomorrow_trigger_price).toFixed(3)}<br> -->
-          `;
-    else
-      card.innerHTML = `
-             <!-- <span class="state ${stateClass}">N/A</span> <strong>${d.name}</strong><br> -->
-             <span class="state ${stateClass}"><strong>${d.name}</strong></span><br>
-            Mode: ${d.mode}<br>
-            <s>Telldus: ${d.telldus}</s><br>
-            <s>Price: ${d.price}</s><br>
-            <s>Ratio: ${d.ratio}</s><br>
-            <!-- <s>Trigger price: ${Number(d.today_trigger_price).toFixed(3)}</s><br> -->
-            <!-- Tomrw trigger: ${Number(d.tomorrow_trigger_price).toFixed(3)}<br> -->
-          `;
+    let html = "";
+
+    if (d.mode === "Price") {
+      html = `
+    <span class="state ${stateClass}"><strong>${d.name}</strong></span><br>
+    Mode: ${d.mode}<br>
+    Telldus: ${d.telldus}<br>
+    Price: ${d.price}<br>
+    <s>Ratio: ${d.ratio}</s><br>
+  `;
+    } else if (d.mode === "Ratio") {
+      html = `
+    <span class="state ${stateClass}"><strong>${d.name}</strong></span><br>
+    Mode: ${d.mode}<br>
+    Telldus: ${d.telldus}<br>
+    <s>Price: ${d.price}</s><br>
+    Ratio: ${d.ratio}<br>
+  `;
+    } else {
+      html = `
+    <span class="state ${stateClass}"><strong>${d.name}</strong></span><br>
+    Mode: ${d.mode}<br>
+    <s>Telldus: ${d.telldus}</s><br>
+    <s>Price: ${d.price}</s><br>
+    <s>Ratio: ${d.ratio}</s><br>
+  `;
+    }
+
+    if (config.webui_toggle === true) {
+      html += `<button class="switch-on">On</button> <button class="switch-off">Off</button>`;
+    }
+
+    card.innerHTML = html;
+
+    if (config.webui_toggle) {
+      const btnOn = card.querySelector(".switch-on");
+      const btnOff = card.querySelector(".switch-off");
+
+      btnOn.addEventListener("click", async () => {
+        try {
+          await fetch(`/switchon/${encodeURIComponent(d.name)}`, {
+            method: "POST",
+          });
+          console.log(`${d.name} switched on`);
+        } catch (err) {
+          console.error("Error switching on:", err);
+        }
+      });
+
+      btnOff.addEventListener("click", async () => {
+        try {
+          await fetch(`/switchoff/${encodeURIComponent(d.name)}`, {
+            method: "POST",
+          });
+          console.log(`${d.name} switched off`);
+        } catch (err) {
+          console.error("Error switching off:", err);
+        }
+      });
+    }
 
     container.appendChild(card);
   }
@@ -240,7 +271,7 @@ document.addEventListener("mouseover", (e) => {
   const ds1 = chartRef.data.datasets[1];
   if (ds1) {
     ds1.backgroundColor = ds1.data.map((v, i) =>
-      v < threshold_tomorrow ? "green" : "#444"
+      v < threshold_tomorrow ? "green" : "#444",
     );
   }
 
@@ -260,8 +291,8 @@ document.addEventListener("mouseout", (e) => {
   const currentLabel = `${hours}:${mins}`;
 
   // Reset TODAY
-  chartRef.data.datasets[0].backgroundColor = labels.map(
-    (l) => (l === currentLabel ? "orange" : "#888")
+  chartRef.data.datasets[0].backgroundColor = labels.map((l) =>
+    l === currentLabel ? "orange" : "#888",
   );
 
   // Reset TOMORROW only if present
@@ -273,10 +304,40 @@ document.addEventListener("mouseout", (e) => {
   chartRef.update();
 });
 
-// Refresh device list
-setInterval(deviceList, 5000);
-deviceList();
+async function checkBackendHealth() {
+  const el = document.getElementById("health");
+  if (!el) return;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch("/health", { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      el.textContent = "Connected ✔️";
+      el.style.color = "green";
+    } else {
+      el.textContent = "Disconnected ❌";
+      el.style.color = "red";
+    }
+  } catch {
+    const el = document.getElementById("health");
+    if (!el) return;
+    el.textContent = "Disconnected ❌";
+    el.style.color = "red";
+  }
+}
 
 // Refresh price chart
-setInterval(priceChart, 60000);
+setInterval(priceChart, 120 * 1000);
 priceChart();
+
+// Refresh device list
+setInterval(deviceList, 5 * 1000);
+deviceList();
+
+// Check server health
+setInterval(checkBackendHealth, 3 * 1000);
+checkBackendHealth();
