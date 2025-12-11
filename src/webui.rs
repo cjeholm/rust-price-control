@@ -1,19 +1,51 @@
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use std::{
     fs,
     sync::{Arc, Mutex},
 };
+use tiny_http::StatusCode;
 use tiny_http::{Response, Server};
 use urlencoding::decode;
 
-use crate::actions;
-use crate::structs;
 use crate::telldus;
+use crate::{device_model, structs};
+
+fn respond_json(request: tiny_http::Request, body: String, status: StatusCode) {
+    let _ = request.respond(
+        Response::from_string(body)
+            .with_status_code(status)
+            .with_header(
+                "Content-Type: application/json"
+                    .parse::<tiny_http::Header>()
+                    .unwrap(),
+            ),
+    );
+}
+
+fn respond_text(request: tiny_http::Request, body: &str, status: StatusCode, content_type: &str) {
+    let _ = request.respond(
+        Response::from_string(body)
+            .with_status_code(status)
+            .with_header(
+                format!("Content-Type: {}", content_type)
+                    .parse::<tiny_http::Header>()
+                    .unwrap(),
+            ),
+    );
+}
+
+fn read_static(path: &str, embedded: &str, debug: bool) -> Result<String, std::io::Error> {
+    if debug {
+        fs::read_to_string(path)
+    } else {
+        Ok(embedded.to_string())
+    }
+}
 
 pub fn run_server(
     data: Arc<Mutex<structs::AppState>>,
     config: &structs::Config,
-    mut devices: structs::Devices,
+    mut devices: device_model::Devices,
 ) {
     #[cfg(debug_assertions)]
     const DEBUG: bool = true;
@@ -21,244 +53,265 @@ pub fn run_server(
     const DEBUG: bool = false;
 
     let addr = format!("0.0.0.0:{}", config.webui_port);
-    let server = Server::http(&addr).unwrap();
+    let server = Server::http(&addr).expect("Failed to bind HTTP server");
 
     for request in server.incoming_requests() {
         let url = request.url().to_string();
         debug!("Incoming request: {}", url);
 
         match (request.method(), url.as_str()) {
-            (tiny_http::Method::Post, path) if path.starts_with("/switchon/") => {
-                if config.webui_toggle {
-                    let name_encoded = path.trim_start_matches("/switchon/");
-                    let name =
-                        decode(name_encoded).unwrap_or_else(|_| name_encoded.to_string().into());
+            // ---------------- health ----------------
+            (_, "/health") => {
+                respond_text(request, "OK", StatusCode(200), "text/plain");
+            }
 
-                    for device in devices.device.iter_mut() {
-                        if device.name == name {
-                            info!("User switching On device {}", name);
-                            let _ = actions::change_state(config, device, structs::State::On);
-                        }
+            // ---------------- listdevices ----------------
+            (_, "/listdevices") => {
+                let (json, status) = match telldus::telldus_list(config) {
+                    Ok(json) => (json, StatusCode(200)),
+                    Err(e) => {
+                        error!("Telldus request failed: {e}. Check telldus ip address and token.");
+                        (r#"{ "device": [] }"#.to_string(), StatusCode(500))
                     }
+                };
 
-                    let _ = request.respond(
-                        Response::from_string(format!(
-                            r#"{{"status":"ok","action":"on","name":"{}"}}"#,
-                            name
-                        ))
-                        .with_header(
-                            "Content-Type: application/json"
-                                .parse::<tiny_http::Header>()
-                                .unwrap(),
-                        )
-                        .with_status_code(200),
+                respond_json(request, json, status);
+            }
+
+            // ---------------- shared state helpers ----------------
+            (_, "/data") => {
+                let state = match data.lock() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        error!("State mutex poisoned: {e}");
+                        respond_json(request, "{}".to_string(), StatusCode(500));
+                        continue;
+                    }
+                };
+
+                match serde_json::to_string(&*state) {
+                    Ok(json) => respond_json(request, json, StatusCode(200)),
+                    Err(e) => {
+                        error!("JSON serialize failed: {e}");
+                        respond_json(request, "{}".to_string(), StatusCode(500));
+                    }
+                }
+            }
+
+            (_, "/config") => {
+                let state = match data.lock() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        error!("State mutex poisoned: {e}");
+                        respond_json(request, "{}".to_string(), StatusCode(500));
+                        continue;
+                    }
+                };
+
+                match serde_json::to_string(&state.config) {
+                    Ok(json) => respond_json(request, json, StatusCode(200)),
+                    Err(e) => {
+                        error!("JSON serialize failed: {e}");
+                        respond_json(request, "{}".to_string(), StatusCode(500));
+                    }
+                }
+            }
+
+            (_, "/devices") => {
+                let state = match data.lock() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        error!("State mutex poisoned: {e}");
+                        respond_json(request, "{}".to_string(), StatusCode(500));
+                        continue;
+                    }
+                };
+
+                match serde_json::to_string(&state.devices) {
+                    Ok(json) => respond_json(request, json, StatusCode(200)),
+                    Err(e) => {
+                        error!("JSON serialize failed: {e}");
+                        respond_json(request, "{}".to_string(), StatusCode(500));
+                    }
+                }
+            }
+
+            (_, "/today") => {
+                let state = match data.lock() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        error!("State mutex poisoned: {e}");
+                        respond_json(request, "{}".to_string(), StatusCode(500));
+                        continue;
+                    }
+                };
+
+                match serde_json::to_string(&state.todays_spot_prices) {
+                    Ok(json) => respond_json(request, json, StatusCode(200)),
+                    Err(e) => {
+                        error!("JSON serialize failed: {e}");
+                        respond_json(request, "{}".to_string(), StatusCode(500));
+                    }
+                }
+            }
+
+            (_, "/tomorrow") => {
+                let state = match data.lock() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        error!("State mutex poisoned: {e}");
+                        respond_json(request, "{}".to_string(), StatusCode(500));
+                        continue;
+                    }
+                };
+
+                match serde_json::to_string(&state.tomorrows_spot_prices) {
+                    Ok(json) => respond_json(request, json, StatusCode(200)),
+                    Err(e) => {
+                        error!("JSON serialize failed: {e}");
+                        respond_json(request, "{}".to_string(), StatusCode(500));
+                    }
+                }
+            }
+
+            (tiny_http::Method::Post, path) if path.starts_with("/switchon/") => {
+                if !config.webui_toggle {
+                    warn!("Disabled: User switching On device");
+                    respond_json(
+                        request,
+                        r#"{"status":"forbidden"}"#.to_string(),
+                        StatusCode(403),
+                    );
+                    continue;
+                }
+
+                let name_encoded = path.trim_start_matches("/switchon/");
+                let name = decode(name_encoded).unwrap_or_else(|_| name_encoded.to_string().into());
+
+                let mut found = false;
+                for device in devices.device.iter_mut() {
+                    if device.name == name {
+                        info!("User switching On device {}", name);
+                        if let Err(e) = device.switch_on(config) {
+                            error!("Failed to switch on {}: {e}", name);
+                        }
+                        found = true;
+                    }
+                }
+
+                if found {
+                    respond_json(
+                        request,
+                        format!(r#"{{"status":"ok","action":"on","name":"{}"}}"#, name),
+                        StatusCode(200),
                     );
                 } else {
-                    let name = path.trim_start_matches("/switchon/");
-                    warn!("Disabled: User switching On device {}", name);
-
-                    let _ = request.respond(
-                        Response::from_string(format!(
-                            r#"{{"status":"forbidden","action":"on","name":"{}"}}"#,
+                    respond_json(
+                        request,
+                        format!(
+                            r#"{{"status":"not_found","action":"on","name":"{}"}}"#,
                             name
-                        ))
-                        .with_header(
-                            "Content-Type: application/json"
-                                .parse::<tiny_http::Header>()
-                                .unwrap(),
-                        )
-                        .with_status_code(403),
+                        ),
+                        StatusCode(404),
                     );
                 }
             }
 
             (tiny_http::Method::Post, path) if path.starts_with("/switchoff/") => {
-                if config.webui_toggle {
-                    let name_encoded = path.trim_start_matches("/switchoff/");
-                    let name =
-                        decode(name_encoded).unwrap_or_else(|_| name_encoded.to_string().into());
+                if !config.webui_toggle {
+                    warn!("Disabled: User switching Off device");
+                    respond_json(
+                        request,
+                        r#"{"status":"forbidden"}"#.to_string(),
+                        StatusCode(403),
+                    );
+                    continue;
+                }
 
-                    for device in devices.device.iter_mut() {
-                        if device.name == name {
-                            info!("User switching Off {}", name);
-                            let _ = actions::change_state(config, device, structs::State::Off);
+                let name_encoded = path.trim_start_matches("/switchoff/");
+                let name = decode(name_encoded).unwrap_or_else(|_| name_encoded.to_string().into());
+
+                let mut found = false;
+                for device in devices.device.iter_mut() {
+                    if device.name == name {
+                        info!("User switching Off device {}", name);
+                        if let Err(e) = device.switch_off(config) {
+                            error!("Failed to switch off {}: {e}", name);
                         }
+                        found = true;
                     }
+                }
 
-                    let _ = request.respond(
-                        Response::from_string(format!(
-                            r#"{{"status":"ok","action":"off","name":"{}"}}"#,
-                            name
-                        ))
-                        .with_header(
-                            "Content-Type: application/json"
-                                .parse::<tiny_http::Header>()
-                                .unwrap(),
-                        )
-                        .with_status_code(200),
+                if found {
+                    respond_json(
+                        request,
+                        format!(r#"{{"status":"ok","action":"off","name":"{}"}}"#, name),
+                        StatusCode(200),
                     );
                 } else {
-                    let name = path.trim_start_matches("/switchoff/");
-                    warn!("Disabled: User switching Off device {}", name);
-
-                    let _ = request.respond(
-                        Response::from_string(format!(
-                            r#"{{"status":"forbidden","action":"off","name":"{}"}}"#,
+                    respond_json(
+                        request,
+                        format!(
+                            r#"{{"status":"not_found","action":"off","name":"{}"}}"#,
                             name
-                        ))
-                        .with_header(
-                            "Content-Type: application/json"
-                                .parse::<tiny_http::Header>()
-                                .unwrap(),
-                        )
-                        .with_status_code(403),
+                        ),
+                        StatusCode(404),
                     );
                 }
             }
-
-            (_, "/health") => {
-                let _ = request.respond(Response::from_string("OK").with_status_code(200));
-            }
-
-            (_, "/listdevices") => {
-                let state = data.lock().unwrap();
-                let json = telldus::telldus_list(config).unwrap();
-                drop(state);
-
-                let _ = request.respond(
-                    Response::from_string(json).with_header(
-                        "Content-Type: application/json"
-                            .parse::<tiny_http::Header>()
-                            .unwrap(),
-                    ),
-                );
-            }
-
-            (_, "/data") => {
-                let state = data.lock().unwrap();
-                let json = serde_json::to_string(&*state).unwrap();
-                drop(state);
-
-                let _ = request.respond(
-                    Response::from_string(json).with_header(
-                        "Content-Type: application/json"
-                            .parse::<tiny_http::Header>()
-                            .unwrap(),
-                    ),
-                );
-            }
-
-            (_, "/config") => {
-                let state = data.lock().unwrap();
-                let json = serde_json::to_string(&state.config).unwrap();
-                drop(state);
-
-                let _ = request.respond(
-                    Response::from_string(json).with_header(
-                        "Content-Type: application/json"
-                            .parse::<tiny_http::Header>()
-                            .unwrap(),
-                    ),
-                );
-            }
-
-            (_, "/devices") => {
-                let state = data.lock().unwrap();
-                let json = serde_json::to_string(&state.devices).unwrap();
-                drop(state);
-
-                let _ = request.respond(
-                    Response::from_string(json).with_header(
-                        "Content-Type: application/json"
-                            .parse::<tiny_http::Header>()
-                            .unwrap(),
-                    ),
-                );
-            }
-
-            (_, "/today") => {
-                let state = data.lock().unwrap();
-                let json = serde_json::to_string(&state.todays_spot_prices).unwrap();
-                drop(state);
-
-                let _ = request.respond(
-                    Response::from_string(json).with_header(
-                        "Content-Type: application/json"
-                            .parse::<tiny_http::Header>()
-                            .unwrap(),
-                    ),
-                );
-            }
-
-            (_, "/tomorrow") => {
-                let state = data.lock().unwrap();
-                let json = serde_json::to_string(&state.tomorrows_spot_prices).unwrap();
-                drop(state);
-
-                let _ = request.respond(
-                    Response::from_string(json).with_header(
-                        "Content-Type: application/json"
-                            .parse::<tiny_http::Header>()
-                            .unwrap(),
-                    ),
-                );
-            }
-
+            // ---------------- static files ----------------
             (_, "/pricecontrol.js") => {
-                let html = if DEBUG {
-                    fs::read_to_string("static/pricecontrol.js").unwrap()
-                } else {
-                    include_str!("../static/pricecontrol.js").to_string()
-                };
-
-                let _ = request.respond(
-                    Response::from_string(html).with_header(
-                        "Content-Type: text/html"
-                            .parse::<tiny_http::Header>()
-                            .unwrap(),
-                    ),
-                );
+                match read_static(
+                    "static/pricecontrol.js",
+                    include_str!("../static/pricecontrol.js"),
+                    DEBUG,
+                ) {
+                    Ok(js) => respond_text(request, &js, StatusCode(200), "application/javascript"),
+                    Err(e) => {
+                        error!("Failed to load pricecontrol.js: {e}");
+                        respond_text(request, "Internal error", StatusCode(500), "text/plain");
+                    }
+                }
             }
 
             (_, "/listdevices.htm") => {
-                let html = if DEBUG {
-                    fs::read_to_string("static/listdevices.htm").unwrap()
-                } else {
-                    include_str!("../static/listdevices.htm").to_string()
-                };
-
-                let _ = request.respond(
-                    Response::from_string(html).with_header(
-                        "Content-Type: text/html"
-                            .parse::<tiny_http::Header>()
-                            .unwrap(),
-                    ),
-                );
+                match read_static(
+                    "static/listdevices.htm",
+                    include_str!("../static/listdevices.htm"),
+                    DEBUG,
+                ) {
+                    Ok(html) => respond_text(request, &html, StatusCode(200), "text/html"),
+                    Err(e) => {
+                        error!("Failed to load listdevices.htm: {e}");
+                        respond_text(request, "Internal error", StatusCode(500), "text/plain");
+                    }
+                }
             }
 
             (_, "/") => {
-                let raw_html = if DEBUG {
-                    fs::read_to_string("static/index.html").unwrap()
-                } else {
-                    include_str!("../static/index.html").to_string()
-                };
+                match read_static(
+                    "static/index.html",
+                    include_str!("../static/index.html"),
+                    DEBUG,
+                ) {
+                    Ok(raw) => {
+                        let html = raw
+                            .replace("{{PROJECT_NAME}}", env!("CARGO_PKG_NAME"))
+                            .replace("{{PROJECT_VERSION}}", env!("CARGO_PKG_VERSION"))
+                            .replace("{{PROJECT_AUTHORS}}", env!("CARGO_PKG_AUTHORS"));
 
-                let html = raw_html
-                    .replace("{{PROJECT_NAME}}", env!("CARGO_PKG_NAME"))
-                    .replace("{{PROJECT_VERSION}}", env!("CARGO_PKG_VERSION"))
-                    .replace("{{PROJECT_AUTHORS}}", env!("CARGO_PKG_AUTHORS"));
-
-                let _ = request.respond(
-                    Response::from_string(html).with_header(
-                        "Content-Type: text/html"
-                            .parse::<tiny_http::Header>()
-                            .unwrap(),
-                    ),
-                );
+                        respond_text(request, &html, StatusCode(200), "text/html");
+                    }
+                    Err(e) => {
+                        error!("Failed to load index.html: {e}");
+                        respond_text(request, "Internal error", StatusCode(500), "text/plain");
+                    }
+                }
             }
 
+            // ---------------- fallback ----------------
             _ => {
-                let _ = request.respond(Response::from_string("Not found").with_status_code(404));
+                respond_text(request, "Not found", StatusCode(404), "text/plain");
             }
         }
     }

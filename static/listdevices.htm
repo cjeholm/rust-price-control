@@ -10,18 +10,34 @@
         font-family: system-ui, sans-serif;
         font-size: 1.1em;
       }
+
+      #text {
+        padding: 20px;
+      }
+
+      #devices {
+        background-color: #333;
+        padding: 20px;
+      }
+
+      .error {
+        color: #f88;
+      }
     </style>
   </head>
+
   <body>
     <section id="text">
       <h2>Telldus Devices</h2>
       <ul>
         <li>
           These are the devices found on your Telldus system, formatted for your
-          config. Values for <i>mode</i>, <i>ratio</i> and <i>price</i> are
-          defaults.
+          config. Values for <i>mode</i>, <i>ratio</i> and <i>price</i> are defaults.
         </li>
-        <li>Copy & paste chosen devices, including the <i>[[device]]</i> header to your config file and change their settings.</li>
+        <li>
+          Copy &amp; paste chosen devices, including the <i>[[device]]</i> header to
+          your config file and change their settings.
+        </li>
         <li>Set <i>telldus = true</i> to enable price control for a device.</li>
         <li>
           The <i>name</i> value can be set to anything you want, the Telldus API only
@@ -29,28 +45,38 @@
         </li>
       </ul>
     </section>
-    <section id="devices">
-      <div id="device-list"></div>
-    </section>
-    <style>
-      #text {
-        padding: 20px;
-      }
-      #devices {
-        background-color: #333;
-        padding: 20px;
-      }
-    </style>
-    <script>
-      fetch("/listdevices")
-        .then((res) => res.json())
-        .then((data) => {
-          const container = document.getElementById("device-list");
 
-          data.device
-            .filter((d) => d.type === "device")
-            .forEach((d) => {
-              container.innerHTML += `
+    <section id="devices">
+      <div id="device-list">Loading devices…</div>
+    </section>
+
+    <script>
+      const container = document.getElementById("device-list");
+
+      fetch("/listdevices")
+        .then(res => {
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          return res.json();
+        })
+        .then(data => {
+          if (!data || !Array.isArray(data.device)) {
+            container.textContent = "No devices found";
+            return;
+          }
+
+          const devices = data.device.filter(d => d.type === "device");
+
+          if (devices.length === 0) {
+            container.textContent = "No devices found";
+            return;
+          }
+
+          let output = "";
+
+          for (const d of devices) {
+            output += `
 [[device]]<br>
 name = "${d.name}"<br>
 mode = "Ratio"<br>
@@ -61,9 +87,15 @@ telldus = false<br>
 telldus_id = "${d.id}"<br>
 <br>
 `;
-            });
+          }
+
+          container.innerHTML = output;
         })
-        .catch(console.error);
+        .catch(err => {
+          console.error(err);
+          container.innerHTML =
+            '<span class="error">Failed to load devices. Check telldus ip address and token.</span>';
+        });
     </script>
   </body>
 </html>

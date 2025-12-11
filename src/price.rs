@@ -1,13 +1,12 @@
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Local};
-use log::error;
-use log::{ info, debug };
+use log::{debug, info};
 use reqwest::blocking::Client;
 use serde_json::Value;
+use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::time::Duration as TimeDuration;
-use std::env;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::structs;
 
@@ -47,14 +46,16 @@ fn load_prices_from_file(file: String) -> Result<Value> {
 
 /// Save json data to local file
 fn save_prices_to_file(value: &Value, file: &str) -> Result<()> {
-    // IMPROVEMENT: atomic write using temporary file
     let mut path = env::temp_dir();
     path.push(file);
+
     let mut tmp_path = env::temp_dir();
     tmp_path.push(file);
+
     let mut file = File::create(&tmp_path)?;
     let pretty = serde_json::to_string_pretty(value)?;
     file.write_all(pretty.as_bytes())?;
+
     std::fs::rename(tmp_path, path)?;
     Ok(())
 }
@@ -84,33 +85,14 @@ fn try_download_and_save(day: &structs::Day) -> Result<Value> {
     Ok(data)
 }
 
-/// Print the prices, line by line
-fn _print_prices(json: &serde_json::Value, currency: &str) {
-    match json.as_array() {
-        Some(array) => {
-            array
-                .iter()
-                .filter_map(|obj| {
-                    let price = obj.get(currency)?.as_f64()?;
-                    let label = obj.get("time_start")?.as_str()?;
-                    Some((label, price))
-                })
-                .for_each(|(label, price)| println!("{} : {}", label, price));
-        }
-        None => {
-            error!("Expected a JSON array at top level, but got: {}", json);
-        }
-    }
-}
-
-// Return the current price
+/// Return the current price
 pub fn current_price(json: &Value, currency: &str) -> Option<f64> {
     json.as_array()?
         .iter()
         .find_map(|obj| extract_valid_price(obj, currency))
 }
 
-// Return the average price
+/// Return the average price
 pub fn average_price(json: &Value, currency: &str) -> Option<f64> {
     let array = json.as_array()?;
 
@@ -126,12 +108,10 @@ pub fn average_price(json: &Value, currency: &str) -> Option<f64> {
     }
 }
 
-// Return the n'th sorted price for Ratio mode
+/// Return the n'th sorted price for Ratio mode
 pub fn ratio_price(json: &Value, currency: &str, ratio: f64) -> Option<f64> {
     let array = json.as_array()?;
-    // IMPROVEMENT: clamp ratio to safe range
     let safe_ratio = ratio.clamp(0.0, 1.0);
-    // let index = (array.len() as f64 * safe_ratio).ceil();
     let index = ((array.len() - 1) as f64 * safe_ratio).floor() as usize;
 
     let mut prices: Vec<f64> = array
@@ -151,7 +131,8 @@ fn extract_valid_price(obj: &Value, currency: &str) -> Option<f64> {
     let start = parse_local_datetime(start_str)?;
     let end = parse_local_datetime(end_str)?;
 
-    let now = Local::now();
+    let now = OffsetDateTime::now_local().ok()?;
+
     if now >= start && now < end {
         Some(price)
     } else {
@@ -161,17 +142,17 @@ fn extract_valid_price(obj: &Value, currency: &str) -> Option<f64> {
 
 /// Total price incl fees and vat
 pub fn total_price(spot: f64, config: &structs::Config) -> f64 {
-    let total: f64 = spot
+    let total = spot
         + config.grid_fee
         + config.energy_tax
         + config.variable_costs
         + config.spot_fee
         + config.cert_fee;
+
     total * (1.0 + config.vat)
 }
 
-pub fn parse_local_datetime(s: &str) -> Option<DateTime<Local>> {
-    DateTime::parse_from_rfc3339(s)
-        .ok()
-        .map(|dt| dt.with_timezone(&Local))
+/// Parse RFC3339 timestamp into local OffsetDateTime
+pub fn parse_local_datetime(s: &str) -> Option<OffsetDateTime> {
+    OffsetDateTime::parse(s, &Rfc3339).ok()
 }

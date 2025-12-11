@@ -1,0 +1,49 @@
+# LOCAL SETTINGS
+# Change these for your location
+api = "https://www.elprisetjustnu.se/api/v1/prices/"
+area = "SE3"
+currency = "SEK_per_kWh" # key to look for in the price data file. SEK_per_kWh, NOK_per_kWh, EUR_per_kWh, etc
+
+# CONFIG FILE PATH
+# The program checks for this file (pricecontrol.toml) in the following locations:
+# Linux:   /home/Alice/.config/
+# Windows: C:\Users\Alice\AppData\Roaming\
+# macOS:   /Users/Alice/Library/Application Support
+# If the file is not found in that location, fallback is to look for it in the current directory
+
+# TAXES AND FEES
+# Set these in the same base currency as above. Except for VAT; 25% = 0.25.
+# These are added together with spot ONLY for DISPLAYING total price.
+# All device control functions use spot price only.
+grid_fee = 0.3120 # elöverföring
+energy_tax = 0.4390 # energiskatt
+variable_costs = 0.0438 # rörliga kostnader
+spot_fee = 0.07 # fast påslag spot
+cert_fee = 0.014 # fast påslag elcertifikat
+vat = 0.25 # moms: 25% = 0.25
+
+# GENERAL SETTINGS
+# You probably wont need to change these
+interval = 10
+webui_port = 8088
+
+# Enable endpoints and webui buttons for manually switching on and off devices.
+# Everyone with access to your webui will be able to toggle your devices.
+webui_toggle = false
+
+# TELLDUS
+telldus_ip = "192.168.0.101"
+telldus_token ="Bearer xxxxx"
+
+# DEVICES
+
+[[device]]
+name = "dummy"
+mode = "Ratio"
+ratio = 0.4
+price = 1.2
+force_update = false
+telldus = false
+telldus_id = "1"
+script_on = ""
+script_off = ""

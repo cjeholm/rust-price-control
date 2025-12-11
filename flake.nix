@@ -31,7 +31,7 @@
         pkgs.pkgsCross.mingwW64.buildPackages.gcc
         pkgs.pkgsCross.mingwW64.windows.pthreads
 
-        pkgs.openssl
+        # pkgs.openssl
         pkgs.pkg-config
       ];
 

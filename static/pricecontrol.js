@@ -153,13 +153,13 @@ async function priceChart() {
   const spot = document.createElement("div");
   spot.className = "price-card";
   spot.innerHTML = `
-            Spot price: <strong>${currentPrice.toFixed(3)}</strong> <br>
+            Spot price: <strong>${currentPrice.toFixed(4)}</strong> <br>
           `;
   container.appendChild(spot);
   const total = document.createElement("div");
   total.className = "price-card";
   total.innerHTML = `
-            Total price: <strong>${totalPrice.toFixed(3)}</strong> <br>
+            Total price: <strong>${totalPrice.toFixed(4)}</strong> <br>
           `;
   container.appendChild(total);
   deviceList();
