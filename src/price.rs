@@ -6,7 +6,7 @@ use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::time::Duration as TimeDuration;
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 use crate::structs;
 
@@ -155,4 +155,71 @@ pub fn total_price(spot: f64, config: &structs::Config) -> f64 {
 /// Parse RFC3339 timestamp into local OffsetDateTime
 pub fn parse_local_datetime(s: &str) -> Option<OffsetDateTime> {
     OffsetDateTime::parse(s, &Rfc3339).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn average_price_works() {
+        let data = json!([
+            { "EUR": 10.0 },
+            { "EUR": 20.0 },
+            { "EUR": 30.0 }
+        ]);
+
+        let avg = average_price(&data, "EUR").unwrap();
+        assert_eq!(avg, 20.0);
+    }
+
+    #[test]
+    fn ratio_price_median() {
+        let data = json!([
+            { "EUR": 10.0 },
+            { "EUR": 30.0 },
+            { "EUR": 20.0 }
+        ]);
+
+        let price = ratio_price(&data, "EUR", 0.5).unwrap();
+        assert_eq!(price, 20.0);
+    }
+
+    #[test]
+    fn total_price_adds_all_costs_and_vat() {
+        let config = structs::Config {
+            api: "https://example.com/".to_string(),
+            area: "SE8".to_string(),
+            currency: "SEK".to_string(),
+            interval: 10,
+            webui_port: 8088,
+            webui_toggle: false,
+            grid_fee: 0.3,
+            energy_tax: 0.4,
+            variable_costs: 0.04,
+            spot_fee: 0.1,
+            cert_fee: 0.01,
+            vat: 0.25,
+            telldus_ip: "127.0.0.1".to_string(),
+            telldus_token: "foobar".to_string(),
+        };
+
+        let total = total_price(10.0, &config);
+        assert_eq!(total, (10.0 + 0.3 + 0.4 + 0.04 + 0.1 + 0.01) * 1.25);
+    }
+
+    #[test]
+    fn current_price_returns_some_when_now_is_inside_window() {
+        let data = serde_json::json!([
+            {
+                "EUR": 42.0,
+                "time_start": "2000-01-01T00:00:00Z",
+                "time_end":   "2100-01-01T00:00:00Z"
+            }
+        ]);
+
+        let price = current_price(&data, "EUR");
+        assert_eq!(price, Some(42.0));
+    }
 }

@@ -3,6 +3,7 @@ use std::env;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration as TimeDuration;
+use time::{Date, Duration, OffsetDateTime};
 
 use anyhow::Result;
 use env_logger::Env;
@@ -80,7 +81,8 @@ fn main() -> Result<()> {
     // LOOP
     loop {
         // Today
-        let today = functions::make_today(&config);
+        let date: Date = OffsetDateTime::now_local().unwrap().date();
+        let today = functions::make_day(&config, date);
         let todays_spot_prices = match price::read_price_data(today) {
             Ok(data) => data,
             Err(err) => {
@@ -91,7 +93,8 @@ fn main() -> Result<()> {
         };
 
         // Tomorrows prices for the webui async
-        let tomorrow = functions::make_tomorrow(&config);
+        let date: Date = OffsetDateTime::now_local().unwrap().date() + Duration::days(1);
+        let tomorrow = functions::make_day(&config, date);
         let tomorrows_spot_prices = match price::try_load_local(&tomorrow) {
             Ok(data) => data,
             Err(_) => serde_json::json!({}),

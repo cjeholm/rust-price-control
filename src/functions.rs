@@ -9,7 +9,8 @@ use crate::{config, device_model, price, structs, telldus};
 /// Spawn a thread that loops just to get tomorrow's data at a lower tick rate.
 pub fn get_tomorrow_thread(config: structs::Config) {
     thread::spawn(move || loop {
-        let tomorrow = make_tomorrow(&config);
+        let date: Date = OffsetDateTime::now_local().unwrap().date() + Duration::days(1);
+        let tomorrow = make_day(&config, date);
         if let Err(err) = price::read_price_data(tomorrow) {
             debug!("Failed to download tomorrow’s data: {}", err);
         }
@@ -72,44 +73,22 @@ pub fn check_args(args: &[String], config_result: &Result<structs::Config, struc
 }
 
 /// Make a today-instance
-pub fn make_today(config: &structs::Config) -> structs::Day {
-    let today: Date = OffsetDateTime::now_local().unwrap().date();
+pub fn make_day(config: &structs::Config, date: Date) -> structs::Day {
+    // let date: Date = OffsetDateTime::now_local().unwrap().date();
     let today_str = format!(
         "{}/{:02}-{:02}",
-        today.year(),
-        today.month() as u8,
-        today.day()
+        date.year(),
+        date.month() as u8,
+        date.day()
     );
     structs::Day {
-        date: today,
+        date,
         url: format!("{}{}_{}.json", config.api, today_str, config.area),
         file: format!(
             "{}-{:02}-{:02}_{}.json",
-            today.year(),
-            today.month() as u8,
-            today.day(),
-            config.area
-        ),
-    }
-}
-
-/// Make a tomorrow-instance
-pub fn make_tomorrow(config: &structs::Config) -> structs::Day {
-    let tomorrow: Date = OffsetDateTime::now_local().unwrap().date() + Duration::days(1);
-    let tomorrow_str = format!(
-        "{}/{:02}-{:02}",
-        tomorrow.year(),
-        tomorrow.month() as u8,
-        tomorrow.day()
-    );
-    structs::Day {
-        date: tomorrow,
-        url: format!("{}{}_{}.json", config.api, tomorrow_str, config.area),
-        file: format!(
-            "{}-{:02}-{:02}_{}.json",
-            tomorrow.year(),
-            tomorrow.month() as u8,
-            tomorrow.day(),
+            date.year(),
+            date.month() as u8,
+            date.day(),
             config.area
         ),
     }
@@ -203,4 +182,34 @@ pub fn logic_loop(
     }
 
     Ok(devices)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn make_day_formats_url_and_file_correctly() {
+        let config = structs::Config {
+            api: "https://example.com/".to_string(),
+            area: "SE8".to_string(),
+            currency: "SEK".to_string(),
+            interval: 10,
+            webui_port: 8088,
+            webui_toggle: false,
+            grid_fee: 0.3,
+            energy_tax: 0.4,
+            variable_costs: 0.04,
+            spot_fee: 0.1,
+            cert_fee: 0.01,
+            vat: 0.25,
+            telldus_ip: "127.0.0.1".to_string(),
+            telldus_token: "foobar".to_string(),
+        };
+        let date = Date::from_calendar_date(2025, time::Month::March, 7).unwrap();
+        let day = make_day(&config, date);
+        assert_eq!(day.date, date);
+        assert_eq!(day.url, "https://example.com/2025/03-07_SE8.json");
+        assert_eq!(day.file, "2025-03-07_SE8.json");
+    }
 }
