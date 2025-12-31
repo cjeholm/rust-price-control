@@ -119,6 +119,7 @@ pub fn logic_loop(
     debug!("Average spot price: {:.2} {}", avg_price, &config.currency);
 
     for device in devices.device.iter_mut() {
+        // Mode Price
         if device.mode == device_model::Mode::Price {
             device.today_trigger_price = device.price;
             device.tomorrow_trigger_price = device.price;
@@ -143,6 +144,7 @@ pub fn logic_loop(
             }
         }
 
+        // Mode Ratio
         if device.mode == device_model::Mode::Ratio {
             device.today_trigger_price =
                 price::ratio_price(today_spot_prices, &config.currency, device.ratio).unwrap();
@@ -168,6 +170,32 @@ pub fn logic_loop(
                 );
                 device.state = device.switch_off(config)?;
             }
+        }
+
+        // Mode ON
+        if device.mode == device_model::Mode::On {
+            device.today_trigger_price = 9999.9;
+            device.tomorrow_trigger_price = 9999.9;
+            if device.state != device_model::State::On || device.force_update {
+                info!(
+                    "{}: {:?} mode - Changing state to On",
+                    device.name, device.mode
+                );
+                device.state = device.switch_on(config)?;
+            };
+        }
+
+        // Mode OFF
+        if device.mode == device_model::Mode::Off {
+            device.today_trigger_price = -9999.9;
+            device.tomorrow_trigger_price = -9999.9;
+            if device.state != device_model::State::Off || device.force_update  {
+                info!(
+                    "{}: {:?} mode - Changing state to Off",
+                    device.name, device.mode
+                );
+                device.state = device.switch_off(config)?;
+            };
         }
 
         debug!(

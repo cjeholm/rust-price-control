@@ -29,6 +29,7 @@ A local web UI provides:
 
 - Price graph for today and tomorrow
 - Device list with current state
+- Buttons for switching between modes (Price, Ratio, On, Off)
 
 All configuration is handled through a single config pricecontrol.toml in the
 current path of the systems default config path.
@@ -67,6 +68,14 @@ Example:
 
 Both modes support Telldus devices and virtual devices with script triggers.
 
+### On
+
+The device stays switched on.
+
+### Off
+
+The device stays switched off.
+
 ## Telldus Support
 
 When a Telldus Tellstick is used and a valid API token is provided, the
@@ -82,6 +91,7 @@ This eliminates the need to manually copy device IDs.
 - User-specified electricity spot-price APIs
 - User-specified currencies (SEK, NOK, DKK, EUR, etc.)
 - Price Mode and Ratio Mode
+- Manual On/Off modes
 - Telldus smart switch integration
 - Automatic Telldus device discovery
 - Virtual devices
@@ -124,4 +134,4 @@ Issue reports are welcome. Pull requests are not handled at this moment.
 
 ## License
 
- GPL-3.0 license
+GPL-3.0 license

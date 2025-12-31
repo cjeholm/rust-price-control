@@ -1,6 +1,4 @@
-use serde_json::Value;
 use std::env;
-use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration as TimeDuration;
 use time::{Date, Duration, OffsetDateTime};
@@ -10,6 +8,7 @@ use env_logger::Env;
 use log::{error, info, warn};
 
 mod config;
+mod db;
 mod device_model;
 mod functions;
 mod price;
@@ -52,20 +51,16 @@ fn main() -> Result<()> {
     };
 
     info!("Config file: {}", config_path.display());
-
     let tmp = env::temp_dir();
     info!("Temp dir: {}", tmp.display());
 
-    // Async variables for the web ui
-    let asyncdata = Arc::new(Mutex::new(structs::AppState {
-        config: (config.clone()),
-        devices: (devices.clone()),
-        todays_spot_prices: Value::Array(vec![]), // initially empty
-        tomorrows_spot_prices: Value::Array(vec![]), // initially empty
-    }));
-    let server_data = asyncdata.clone();
-    let server_config = config.clone();
-    let server_devices = devices.clone();
+    // Connect to the database
+    let mut db_conn = db::open_conn()?;
+    db::init_db(&db_conn)?;
+    db::save_config(&db_conn, &config)?;
+    db::save_devices(&mut db_conn, &devices)?;
+    db::save_todays_prices(&db_conn, "".to_string())?;
+    db::save_tomorrows_prices(&db_conn, "".to_string())?;
 
     functions::get_tomorrow_thread(config.clone());
 
@@ -75,7 +70,7 @@ fn main() -> Result<()> {
         config.webui_port
     );
     thread::spawn(move || {
-        webui::run_server(server_data, &server_config, server_devices);
+        webui::run_server();
     });
 
     // LOOP
@@ -100,25 +95,21 @@ fn main() -> Result<()> {
             Err(_) => serde_json::json!({}),
         };
 
-        // let updated_devices = functions::logic_loop(&todays_spot_prices, devices, &config)?;
+        // Run the logic that iterates over devices
         match functions::logic_loop(
             &todays_spot_prices,
             &tomorrows_spot_prices,
-            devices.clone(),
+            db::load_devices(&db_conn)?,
             &config,
         ) {
             Ok(updated_devices) => devices = updated_devices,
             Err(e) => warn!("{e}"),
         }
 
-        // The async var for the webui
-        {
-            let mut state = asyncdata.lock().unwrap();
-            state.config = config.clone();
-            state.devices = devices.clone();
-            state.todays_spot_prices = todays_spot_prices.clone(); // JSON Value
-            state.tomorrows_spot_prices = tomorrows_spot_prices.clone(); // JSON Value
-        }
+        // Update the database
+        db::update_devices(&mut db_conn, &devices)?;
+        db::save_todays_prices(&db_conn, todays_spot_prices.to_string())?;
+        db::save_tomorrows_prices(&db_conn, tomorrows_spot_prices.to_string())?;
 
         thread::sleep(TimeDuration::from_secs(config.interval));
     }

@@ -151,6 +151,7 @@ impl Device {
 }
 
 /// State of devices
+#[repr(i64)]
 #[derive(Deserialize, Serialize, Debug, Default, Clone, PartialEq)]
 pub enum State {
     #[default]
@@ -159,15 +160,28 @@ pub enum State {
     Off,
 }
 
-/// Device modes
+// /// Device modes
 #[derive(Deserialize, Serialize, Debug, Default, Clone, PartialEq)]
 pub enum Mode {
     #[default]
     Unknown,
     Price,
     Ratio,
+    On,
+    Off,
 }
 
+// impl From<State> for i64 {
+//     fn from(s: State) -> Self {
+//         s as i64
+//     }
+// }
+//
+// impl From<Mode> for i64 {
+//     fn from(m: Mode) -> Self {
+//         m as i64
+//     }
+// }
 #[derive(Debug, Error)]
 pub enum ActionError {
     #[error("Invalid state for telldus_switch")]

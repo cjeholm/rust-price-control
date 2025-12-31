@@ -216,7 +216,7 @@ async function deviceList() {
     }
 
     if (config.webui_toggle === true) {
-      html += `<button class="switch-on">On</button> <button class="switch-off">Off</button>`;
+      html += `<button class="switch-on">On</button> <button class="switch-off">Off</button> <button class="switch-price">Price</button> <button class="switch-ratio">Ratio</button>`;
     }
 
     card.innerHTML = html;
@@ -224,6 +224,8 @@ async function deviceList() {
     if (config.webui_toggle) {
       const btnOn = card.querySelector(".switch-on");
       const btnOff = card.querySelector(".switch-off");
+      const btnPrice = card.querySelector(".switch-price");
+      const btnRatio = card.querySelector(".switch-ratio");
 
       btnOn.addEventListener("click", async () => {
         try {
@@ -234,6 +236,9 @@ async function deviceList() {
         } catch (err) {
           console.error("Error switching on:", err);
         }
+        // location.reload();
+        priceChart();
+        deviceList();
       });
 
       btnOff.addEventListener("click", async () => {
@@ -245,6 +250,37 @@ async function deviceList() {
         } catch (err) {
           console.error("Error switching off:", err);
         }
+        // location.reload();
+        priceChart();
+        deviceList();
+      });
+
+      btnPrice.addEventListener("click", async () => {
+        try {
+          await fetch(`/switchprice/${encodeURIComponent(d.name)}`, {
+            method: "POST",
+          });
+          console.log(`${d.name} switched to Price`);
+        } catch (err) {
+          console.error("Error switching to Price:", err);
+        }
+        // location.reload();
+        priceChart();
+        deviceList();
+      });
+
+      btnRatio.addEventListener("click", async () => {
+        try {
+          await fetch(`/switchratio/${encodeURIComponent(d.name)}`, {
+            method: "POST",
+          });
+          console.log(`${d.name} switched to Ratio`);
+        } catch (err) {
+          console.error("Error switching to Ratio:", err);
+        }
+        // location.reload();
+        priceChart();
+        deviceList();
       });
     }
 

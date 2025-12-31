@@ -1,10 +1,7 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::io;
 use thiserror::Error;
 use time::Date;
-
-use crate::device_model;
 
 #[derive(Debug)]
 pub struct Day {
@@ -54,13 +51,4 @@ pub struct Config {
     pub telldus_ip: String,
     #[serde(default)]
     pub telldus_token: String,
-}
-
-/// Shared state for the webui
-#[derive(Clone, Serialize)]
-pub struct AppState {
-    pub config: Config,
-    pub devices: device_model::Devices,
-    pub todays_spot_prices: Value,    // store the JSON array directly
-    pub tomorrows_spot_prices: Value, // store the JSON array directly
 }
