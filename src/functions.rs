@@ -139,7 +139,7 @@ pub fn logic_loop(
                     "{}: {:?} mode - Changing state to Off",
                     device.name, device.mode,
                 );
-                device.state = device.switch_on(config)?;
+                device.state = device.switch_off(config)?;
             }
         }
 
