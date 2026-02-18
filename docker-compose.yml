@@ -1,0 +1,17 @@
+services:
+  pricecontrol:
+    build: .
+    container_name: pricecontrol
+    working_dir: /app
+    ports:
+      - "127.0.0.1:8088:8088"  # bind to localhost only, not 0.0.0.0
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=info
+    volumes:
+      - ./pricecontrol.toml:/app/pricecontrol.toml:ro
+    # Limit resource usage
+    deploy:
+      resources:
+        limits:
+          memory: 256M
