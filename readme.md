@@ -23,7 +23,7 @@ The application is cross-platform and can run:
 
 - As a normal binary
 - As a system service
-- In Docker (image not yet provided)
+- In Docker
 
 A local web UI provides:
 
@@ -101,17 +101,26 @@ This eliminates the need to manually copy device IDs.
 - Can run as a system service
 - Single TOML configuration
 
-## Running
+## Running locally
 
 `cargo run --release`
 
 Or build and run:
 
 `cargo build --release`
-`./target/release/rpc`
+`./target/release/rPC`
 
 A systemd unit or similar can be used for service mode.
-A Dockerfile will be provided later.
+
+## Running in Docker
+
+Config for a minimal Docker setup is provided. Build the image with:
+
+`docker compose build`
+
+Run the container detached with:
+
+`docker compose up -d`
 
 ## Web UI
 
@@ -123,7 +132,6 @@ Shows the price graph and device states.
 
 ## Roadmap
 
-- Official Docker image
 - Support for additional smart-home systems
 - Extended rule engine
 - Optional notifications
